@@ -1,8 +1,42 @@
-"""Pydantic schemas for Story validation and serialization."""
+"""Pydantic schemas for Story validation, generation, and serialization."""
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
+
+ALLOWED_GENRES: list[str] = [
+    "Fantasy",
+    "Adventure",
+    "Mystery",
+    "Comedy",
+    "Romance",
+    "Science Fiction",
+    "Inspirational",
+    "Fiction",
+]
+
+ALLOWED_MOODS: list[str] = [
+    "Happy",
+    "Emotional",
+    "Mysterious",
+    "Exciting",
+    "Funny",
+    "Peaceful",
+    "Suspenseful",
+]
+
+ALLOWED_LENGTHS: list[str] = [
+    "Short",
+    "Medium",
+    "Long",
+]
 
 
 class StoryBase(BaseModel):
@@ -37,21 +71,21 @@ class StoryBase(BaseModel):
         ...,
         min_length=1,
         max_length=50,
-        description="Genre of the story (e.g. Fantasy, Sci-Fi, Mystery).",
+        description="Genre of the story.",
         examples=["Fantasy"],
     )
     mood: str = Field(
         ...,
         min_length=1,
         max_length=50,
-        description="Atmosphere/mood of the story (e.g. Whimsical, Dark, Inspiring).",
-        examples=["Whimsical"],
+        description="Atmosphere/mood of the story.",
+        examples=["Mysterious"],
     )
     length: str = Field(
         ...,
         min_length=1,
         max_length=50,
-        description="Length classification (e.g. Short, Medium, Long).",
+        description="Length classification (Short, Medium, Long).",
         examples=["Short"],
     )
 
@@ -73,8 +107,92 @@ class StoryBase(BaseModel):
 
 
 class StoryCreate(StoryBase):
-    """Schema for creating a new story."""
+    """Schema for creating a new story directly."""
     pass
+
+
+class GenerateStoryRequest(BaseModel):
+    """Schema for initiating an AI story generation request."""
+
+    prompt: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="User text prompt. Optional when an image is supplied.",
+        examples=["A lost astronaut finds a living library on a distant comet."],
+    )
+    image_base64: Optional[str] = Field(
+        default=None,
+        description="Base64-encoded image string (JPEG, PNG, or WEBP, max 5 MB). Optional when prompt is supplied.",
+    )
+    genre: str = Field(
+        ...,
+        description=f"Selected genre. Allowed values: {', '.join(ALLOWED_GENRES)}",
+        examples=["Science Fiction"],
+    )
+    mood: str = Field(
+        ...,
+        description=f"Selected mood. Allowed values: {', '.join(ALLOWED_MOODS)}",
+        examples=["Mysterious"],
+    )
+    length: str = Field(
+        ...,
+        description=f"Selected story length. Allowed values: {', '.join(ALLOWED_LENGTHS)}",
+        examples=["Short"],
+    )
+
+    @field_validator("genre")
+    @classmethod
+    def validate_genre(cls, value: str) -> str:
+        trimmed = value.strip()
+        for allowed in ALLOWED_GENRES:
+            if trimmed.lower() == allowed.lower():
+                return allowed
+        raise ValueError(f"Invalid genre '{trimmed}'. Allowed: {', '.join(ALLOWED_GENRES)}")
+
+    @field_validator("mood")
+    @classmethod
+    def validate_mood(cls, value: str) -> str:
+        trimmed = value.strip()
+        for allowed in ALLOWED_MOODS:
+            if trimmed.lower() == allowed.lower():
+                return allowed
+        raise ValueError(f"Invalid mood '{trimmed}'. Allowed: {', '.join(ALLOWED_MOODS)}")
+
+    @field_validator("length")
+    @classmethod
+    def validate_length(cls, value: str) -> str:
+        trimmed = value.strip()
+        for allowed in ALLOWED_LENGTHS:
+            if trimmed.lower() == allowed.lower():
+                return allowed
+        raise ValueError(f"Invalid length '{trimmed}'. Allowed: {', '.join(ALLOWED_LENGTHS)}")
+
+    @model_validator(mode="after")
+    def validate_prompt_or_image_present(self) -> "GenerateStoryRequest":
+        has_prompt = bool(self.prompt and self.prompt.strip())
+        has_image = bool(self.image_base64 and self.image_base64.strip())
+
+        if not has_prompt and not has_image:
+            raise ValueError("At least one of text prompt or image must be supplied.")
+
+        # Clean prompt if provided
+        if self.prompt:
+            self.prompt = self.prompt.strip()
+
+        return self
+
+
+class GeneratedStoryData(BaseModel):
+    """Internal data transfer object for successfully generated stories."""
+
+    title: str
+    content: str
+    prompt: Optional[str]
+    image_filename: Optional[str]
+    genre: str
+    mood: str
+    length: str
+    word_count: int
 
 
 class StoryResponse(StoryBase):
