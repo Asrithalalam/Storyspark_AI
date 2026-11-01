@@ -520,4 +520,4 @@ npm run build
 
 - **Author**: Asritha Lalam
 - **GitHub**: [@Asrithalalam](https://github.com/Asrithalalam)
-- **Repository**: [storyspark_react_app](https://github.com/Asrithalalam/storyspark_react_app)
+- **Repository**: [Storyspark_AI](https://github.com/Asrithalalam/Storyspark_AI)
