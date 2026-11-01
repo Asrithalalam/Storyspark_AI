@@ -1,16 +1,20 @@
 """SQLAlchemy model for persistent Story storage."""
 
 from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from typing import TYPE_CHECKING
+from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, UTCDateTime
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Story(Base):
     """
     Persistent Story entity in SQLite.
-    Stores generated/saved stories with metadata and timestamps.
+    Stores generated/saved stories with metadata, user ownership, and timestamps.
     """
 
     __tablename__ = "stories"
@@ -42,7 +46,7 @@ class Story(Base):
         String(255),
         nullable=True,
         default=None,
-        doc="Uploaded image filename reference for future visual story support.",
+        doc="Uploaded image filename reference for visual story support.",
     )
     genre: Mapped[str] = mapped_column(
         String(50),
@@ -59,6 +63,14 @@ class Story(Base):
         nullable=False,
         doc="Selected length option (e.g. Short, Medium, Long).",
     )
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        default=None,
+        index=True,
+        doc="Foreign key referencing the User owner. Nullable for legacy unassigned stories.",
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         default=lambda: datetime.now(timezone.utc),
@@ -67,5 +79,12 @@ class Story(Base):
         doc="Timezone-aware UTC timestamp when the story was created.",
     )
 
+    # Many-to-1 relationship: Each story belongs to a User owner (or None for legacy)
+    owner: Mapped["User | None"] = relationship(
+        "User",
+        back_populates="stories",
+        doc="User entity that owns this story.",
+    )
+
     def __repr__(self) -> str:
-        return f"<Story(id={self.id}, title='{self.title}', genre='{self.genre}')>"
+        return f"<Story(id={self.id}, title='{self.title}', genre='{self.genre}', user_id={self.user_id})>"

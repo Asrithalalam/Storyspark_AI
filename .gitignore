@@ -52,6 +52,7 @@ backend/data/*.db
 !backend/data/.gitkeep
 backend/data/uploads/*
 !backend/data/uploads/.gitkeep
+*.bak
 
 # IDE & Editor files
 .vscode/

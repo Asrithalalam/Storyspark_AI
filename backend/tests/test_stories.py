@@ -167,6 +167,24 @@ def test_9_stories_remain_available_after_restarting_backend():
         Base.metadata.create_all(bind=engine1)
         Session1 = sessionmaker(autocommit=False, autoflush=False, bind=engine1)
 
+        # Create user in restart test db
+        s1 = Session1()
+        from app.models.user import User
+        from app.services.auth_service import create_session_token
+        from app.config import settings
+        u1 = User(
+            email="restart_author@storyspark.ai",
+            hashed_password="mock_hash",
+            full_name="Restart Author",
+            auth_provider="local",
+            is_active=True,
+        )
+        s1.add(u1)
+        s1.commit()
+        s1.refresh(u1)
+        token1 = create_session_token(user_id=u1.id, email=u1.email)
+        s1.close()
+
         def get_db_1():
             db = Session1()
             try:
@@ -175,7 +193,11 @@ def test_9_stories_remain_available_after_restarting_backend():
                 db.close()
 
         app.dependency_overrides[get_db] = get_db_1
-        with TestClient(app) as client1:
+        with TestClient(
+            app,
+            headers={"Origin": "http://localhost:5173"},
+            cookies={settings.COOKIE_NAME: token1},
+        ) as client1:
             post_res = client1.post("/api/stories", json={
                 **SAMPLE_STORY_PAYLOAD,
                 "title": "Story That Survives Server Restart",
@@ -199,7 +221,11 @@ def test_9_stories_remain_available_after_restarting_backend():
                 db.close()
 
         app.dependency_overrides[get_db] = get_db_2
-        with TestClient(app) as client2:
+        with TestClient(
+            app,
+            headers={"Origin": "http://localhost:5173"},
+            cookies={settings.COOKIE_NAME: token1},
+        ) as client2:
             get_res = client2.get(f"/api/stories/{persisted_id}")
             assert get_res.status_code == status.HTTP_200_OK
             retrieved_data = get_res.json()
@@ -240,3 +266,55 @@ def test_11_input_validation_rejects_empty_and_missing_fields(client: TestClient
         "title": "   ",
     })
     assert res_whitespace.status_code == 422
+
+
+def test_12_bulk_delete_stories(client: TestClient):
+    """Verify bulk deletion of single and multiple stories with transaction safety."""
+    # Create 3 stories
+    s1 = client.post("/api/stories", json={**SAMPLE_STORY_PAYLOAD, "title": "Bulk Test Story 1"}).json()
+    s2 = client.post("/api/stories", json={**SAMPLE_STORY_PAYLOAD, "title": "Bulk Test Story 2"}).json()
+    s3 = client.post("/api/stories", json={**SAMPLE_STORY_PAYLOAD, "title": "Bulk Test Story 3"}).json()
+
+    # Bulk delete s1 and s2
+    res = client.post("/api/stories/bulk-delete", json={"story_ids": [s1["id"], s2["id"]]})
+    assert res.status_code == status.HTTP_200_OK
+    data = res.json()
+    assert data["deleted_count"] == 2
+    assert set(data["deleted_ids"]) == {s1["id"], s2["id"]}
+
+    # Verify s1 and s2 are gone
+    assert client.get(f"/api/stories/{s1['id']}").status_code == status.HTTP_404_NOT_FOUND
+    assert client.get(f"/api/stories/{s2['id']}").status_code == status.HTTP_404_NOT_FOUND
+
+    # Verify s3 is still present
+    assert client.get(f"/api/stories/{s3['id']}").status_code == status.HTTP_200_OK
+
+
+def test_13_bulk_delete_validation(client: TestClient):
+    """Verify bulk delete rejects empty arrays and handles non-existent IDs gracefully."""
+    # Empty story_ids list returns 422
+    res_empty = client.post("/api/stories/bulk-delete", json={"story_ids": []})
+    assert res_empty.status_code == 422
+
+    # Non-existent IDs return 0 deleted count safely
+    res_nonexistent = client.post("/api/stories/bulk-delete", json={"story_ids": [999998, 999999]})
+    assert res_nonexistent.status_code == status.HTTP_200_OK
+    assert res_nonexistent.json()["deleted_count"] == 0
+
+
+def test_14_clear_all_stories(client: TestClient):
+    """Verify clear-all deletes all stories in the database."""
+    # Create 2 stories
+    client.post("/api/stories", json={**SAMPLE_STORY_PAYLOAD, "title": "Clear Story A"})
+    client.post("/api/stories", json={**SAMPLE_STORY_PAYLOAD, "title": "Clear Story B"})
+
+    # Call clear-all
+    res = client.post("/api/stories/clear-all")
+    assert res.status_code == status.HTTP_200_OK
+    data = res.json()
+    assert data["deleted_count"] >= 2
+
+    # Verify listing is now empty
+    list_res = client.get("/api/stories")
+    assert list_res.status_code == status.HTTP_200_OK
+    assert len(list_res.json()) == 0

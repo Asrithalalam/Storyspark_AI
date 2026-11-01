@@ -6,3 +6,4 @@ sqlalchemy>=2.0.0
 httpx2>=0.2.0
 pytest>=8.0.0
 google-genai>=2.34.0
+pyjwt>=2.8.0

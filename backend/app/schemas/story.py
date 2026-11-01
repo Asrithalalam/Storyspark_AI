@@ -88,6 +88,10 @@ class StoryBase(BaseModel):
         description="Length classification (Short, Medium, Long).",
         examples=["Short"],
     )
+    user_id: Optional[int] = Field(
+        default=None,
+        description="Author user ID.",
+    )
 
     @field_validator("title", "genre", "mood", "length")
     @classmethod
@@ -234,3 +238,36 @@ class StoryDeleteResponse(BaseModel):
 
     message: str = Field(..., description="Deletion confirmation message.")
     id: int = Field(..., description="Identifier of the deleted story.")
+
+
+class BulkDeleteStoriesRequest(BaseModel):
+    """Schema for deleting multiple stories simultaneously."""
+
+    story_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        description="List of positive integer story IDs to delete.",
+    )
+
+    @field_validator("story_ids")
+    @classmethod
+    def validate_ids(cls, ids: list[int]) -> list[int]:
+        valid_ids = [i for i in ids if isinstance(i, int) and i > 0]
+        if not valid_ids:
+            raise ValueError("Must provide at least one valid story ID.")
+        return list(dict.fromkeys(valid_ids))  # preserve order & deduplicate
+
+
+class BulkDeleteStoriesResponse(BaseModel):
+    """Schema returned after bulk deletion."""
+
+    message: str = Field(..., description="Confirmation message.")
+    deleted_count: int = Field(..., description="Number of stories successfully deleted.")
+    deleted_ids: list[int] = Field(..., description="IDs of deleted stories.")
+
+
+class ClearAllStoriesResponse(BaseModel):
+    """Schema returned after clearing all stories."""
+
+    message: str = Field(..., description="Confirmation message.")
+    deleted_count: int = Field(..., description="Total stories deleted.")

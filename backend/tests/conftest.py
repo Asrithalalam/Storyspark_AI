@@ -7,8 +7,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+from app.models.user import User
+from app.services.auth_service import create_session_token
 
 
 @pytest.fixture(scope="session")
@@ -52,8 +55,24 @@ def db_session(test_engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
-def client(db_session: Session) -> Generator[TestClient, None, None]:
-    """FastAPI TestClient with overridden get_db dependency."""
+def default_user(db_session: Session) -> User:
+    """Create a default authenticated test user."""
+    user = User(
+        email="default_test_author@storyspark.ai",
+        hashed_password="mock_hash",
+        full_name="Default Author",
+        auth_provider="local",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture(scope="function")
+def client(db_session: Session, default_user: User) -> Generator[TestClient, None, None]:
+    """FastAPI TestClient with overridden get_db and default session cookie."""
     def _override_get_db():
         try:
             yield db_session
@@ -61,6 +80,11 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
             pass
 
     app.dependency_overrides[get_db] = _override_get_db
-    with TestClient(app) as test_client:
+    token = create_session_token(user_id=default_user.id, email=default_user.email)
+    with TestClient(
+        app,
+        headers={"Origin": "http://localhost:5173"},
+        cookies={settings.COOKIE_NAME: token},
+    ) as test_client:
         yield test_client
     app.dependency_overrides.clear()
