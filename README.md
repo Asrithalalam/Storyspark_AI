@@ -146,7 +146,7 @@ flowchart TD
 ## Project Structure
 
 ```text
-storyspark_react_app/
+Storyspark_AI/
 ├── README.md                           # Comprehensive documentation
 ├── .gitignore                          # Git exclusions for dependencies, environments, DBs
 ├── screenshots/                        # Application UI screenshots
@@ -286,8 +286,8 @@ Before setting up StorySpark AI, ensure you have the following installed:
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/Asrithalalam/storyspark_react_app.git
-cd storyspark_react_app
+git clone https://github.com/Asrithalalam/Storyspark_AI.git
+cd Storyspark_AI
 ```
 
 ### 2. Backend Setup
@@ -349,7 +349,7 @@ The backend API will be running at `http://127.0.0.1:8000`.
 
 1. Open a new terminal window and navigate to the frontend directory:
    ```bash
-   cd storyspark_react_app/frontend
+   cd Storyspark_AI/frontend
    ```
 
 2. Install frontend dependencies:
